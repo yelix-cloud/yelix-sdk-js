@@ -1,0 +1,16 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@yelix/openapi@*": "0.1.17"
+  },
+  "jsr": {
+    "@yelix/openapi@0.1.17": {
+      "integrity": "648b99fe1c06a62e8555abea353747305f3459904a9c5c063053804198def177"
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "jsr:@yelix/openapi@0.1.17"
+    ]
+  }
+}
