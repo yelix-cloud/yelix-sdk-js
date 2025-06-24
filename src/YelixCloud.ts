@@ -1,6 +1,8 @@
 import type { OpenAPICore } from 'jsr:@yelix/openapi';
 import { hostname, platform, networkInterfaces } from 'node:os';
 
+const BASE_URL = 'https://yelix-be.deno.dev';
+
 // deno-lint-ignore require-await
 async function getMachineIP(): Promise<string | null> {
   const interfaces = networkInterfaces();
@@ -55,7 +57,7 @@ export class YelixCloud {
 
     try {
       const response = await fetch(
-        'http://localhost:8000/api/v1/collect/project-source',
+        BASE_URL + '/api/v1/collect/project-source',
         {
           method: 'POST',
           headers: {
@@ -110,30 +112,27 @@ export class YelixCloud {
 
   private async sendRequest(request: RequestData): Promise<boolean> {
     try {
-      const response = await fetch(
-        'http://localhost:8000/api/v1/collect/request',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
-          },
-          body: JSON.stringify({
-            startTime: request.startTime,
-            path: request.path,
-            duration: request.duration,
-            method: request.method,
-            metaData: {
-              source: {
-                projectSourceId: this.projectSourceId,
-                machineName,
-                machineIP,
-                machineOS: machinePlatform,
-              },
+      const response = await fetch(BASE_URL + '/api/v1/collect/request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          startTime: request.startTime,
+          path: request.path,
+          duration: request.duration,
+          method: request.method,
+          metaData: {
+            source: {
+              projectSourceId: this.projectSourceId,
+              machineName,
+              machineIP,
+              machineOS: machinePlatform,
             },
-          }),
-        }
-      );
+          },
+        }),
+      });
 
       if (!response.ok) {
         throw new Error(`Failed to log request: ${response.statusText}`);
