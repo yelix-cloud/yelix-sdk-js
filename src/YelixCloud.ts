@@ -1,25 +1,4 @@
 import type { OpenAPICore } from 'jsr:@yelix/openapi';
-import { hostname, platform, networkInterfaces } from 'node:os';
-
-const BASE_URL = 'https://yelix-be.deno.dev';
-
-// deno-lint-ignore require-await
-async function getMachineIP(): Promise<string | null> {
-  const interfaces = networkInterfaces();
-  for (const ifaceList of Object.values(interfaces)) {
-    if (!ifaceList) continue;
-    for (const iface of ifaceList) {
-      if (iface.family === 'IPv4' && !iface.address.startsWith('127.')) {
-        return iface.address;
-      }
-    }
-  }
-  return null;
-}
-
-const machineName = hostname();
-const machineIP = await getMachineIP();
-const machinePlatform = platform();
 
 type RequestData = {
   startTime: number;
@@ -35,29 +14,35 @@ type QueuedRequest = {
 };
 
 export class YelixCloud {
-  private projectSourceId: string | 'Not-Initialized' | 'Initializing' =
+  private instanceId: string | 'Not-Initialized' | 'Initializing' =
     'Not-Initialized';
   private apiKey: string;
   private requestQueue: QueuedRequest[] = [];
   private isProcessingQueue = false;
+  private BASE_URL = 'https://backend.yelix.deno.net';
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, baseUrl?: string) {
     if (!apiKey) {
       throw new Error('API key is required to initialize YelixCloud');
     }
     this.apiKey = apiKey;
-  }
-  private async initialize(environment: string, scheme: OpenAPICore) {
-    if (this.projectSourceId !== 'Not-Initialized') {
-      throw new Error('YelixCloud is already initialized');
+    if (baseUrl) {
+      this.BASE_URL = baseUrl;
     }
-    this.projectSourceId = 'Initializing';
+  }
 
-    this.projectSourceId = `${environment}-${scheme}`;
+  private async initialize(environment: string, schema: OpenAPICore) {
+    if (this.instanceId !== 'Not-Initialized') {
+      console.warn(
+        '[@yelix/sdk] YelixCloud is already initialized or in the process of initializing.'
+      );
+      return;
+    }
+    this.instanceId = 'Initializing';
 
     try {
       const response = await fetch(
-        BASE_URL + '/api/v1/collect/project-source',
+        this.BASE_URL + '/v1/instances/create',
         {
           method: 'POST',
           headers: {
@@ -66,24 +51,25 @@ export class YelixCloud {
           },
           body: JSON.stringify({
             environment,
-            scheme,
+            schema,
           }),
         }
       );
 
       if (!response.ok) {
-        throw new Error('Failed to collect project source');
+        console.warn('[@yelix/sdk] Failed to initialize YelixCloud:', response.statusText);
+        return;
       }
 
       const data = await response.json();
-      this.projectSourceId = data.data.projectSourceId;
+      this.instanceId = data.data.instance_id;
 
       // Process any queued requests
       this.processQueue();
     } catch (error) {
       console.error('Failed to initialize YelixCloud:', error);
-      this.projectSourceId = 'Not-Initialized';
-      throw error;
+      this.instanceId = 'Initialize-Failed';
+      return;
     }
   }
   private processQueue() {
@@ -110,38 +96,47 @@ export class YelixCloud {
     this.isProcessingQueue = false;
   }
 
-  private async sendRequest(request: RequestData): Promise<boolean> {
+  private async sendRequest(_request: RequestData): Promise<boolean> {
     try {
-      const response = await fetch(BASE_URL + '/api/v1/collect/request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          startTime: request.startTime,
-          path: request.path,
-          duration: request.duration,
-          method: request.method,
-          metaData: {
-            source: {
-              projectSourceId: this.projectSourceId,
-              machineName,
-              machineIP,
-              machineOS: machinePlatform,
-            },
-          },
-        }),
+      // const response = await fetch(this.BASE_URL + '/api/v1/collect/request', {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //     Authorization: `Bearer ${this.apiKey}`,
+      //   },
+      //   body: JSON.stringify({
+      //     startTime: request.startTime,
+      //     path: request.path,
+      //     duration: request.duration,
+      //     method: request.method,
+      //     metaData: {
+      //       source: {
+      //         projectSourceId: this.projectSourceId,
+      //         machineName,
+      //         machineIP,
+      //         machineOS: machinePlatform,
+      //       },
+      //     },
+      //   }),
+      // });
+
+      const response = await Promise.resolve({
+        ok: true,
+        statusText: 'OK',
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to log request: ${response.statusText}`);
+        console.warn(
+          '[@yelix/sdk] Failed to send request to YelixCloud:',
+          response.statusText
+        );
+        return false;
       }
 
       return true;
     } catch (error) {
       console.error('Failed to send request:', error);
-      throw error;
+      return false;
     }
   }
 
@@ -154,7 +149,7 @@ export class YelixCloud {
       `Request logged: ${request.method} ${request.path} - Duration: ${request.duration} ms`
     );
 
-    if (this.projectSourceId === 'Not-Initialized') {
+    if (this.instanceId === 'Not-Initialized') {
       return async (environment: string, scheme: OpenAPICore) => {
         await this.initialize(environment, scheme);
         // After initialization, process this request
@@ -165,7 +160,7 @@ export class YelixCloud {
       };
     }
 
-    if (this.projectSourceId === 'Initializing') {
+    if (this.instanceId === 'Initializing') {
       // Queue the request while initializing
       return new Promise<boolean>((resolve, reject) => {
         this.requestQueue.push({ request, resolve, reject });
