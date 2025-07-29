@@ -1,4 +1,23 @@
 import type { OpenAPICore } from 'jsr:@yelix/openapi';
+import { hostname, platform, networkInterfaces } from 'node:os';
+
+// deno-lint-ignore require-await
+async function getMachineIP(): Promise<string | null> {
+  const interfaces = networkInterfaces();
+  for (const ifaceList of Object.values(interfaces)) {
+    if (!Array.isArray(ifaceList)) continue;
+    for (const iface of ifaceList) {
+      if (iface.family === 'IPv4' && !iface.address.startsWith('127.')) {
+        return iface.address;
+      }
+    }
+  }
+  return null;
+}
+
+const machineName = hostname();
+const machineIP = await getMachineIP();
+const machinePlatform = platform();
 
 type RequestData = {
   startTime: number;
@@ -50,7 +69,7 @@ export class YelixCloud {
   // deno-lint-ignore no-explicit-any
   private log(type: 'log' | 'warn' | 'error', ...args: any[]) {
     if (this.debug) {
-      console[type](`[YelixCloud]`, ...args);
+      console[type]('[@yelix/sdk]', ...args);
     } 
   }
 
@@ -76,6 +95,9 @@ export class YelixCloud {
         },
         body: JSON.stringify({
           environment,
+          machineName,
+          machineIP,
+          machineOS: machinePlatform,
           schema,
         }),
       });
