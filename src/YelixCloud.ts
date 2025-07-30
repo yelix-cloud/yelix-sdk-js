@@ -98,7 +98,7 @@ export class YelixCloud {
           machineName,
           machineIP,
           machineOS: machinePlatform,
-          schema,
+          schema: JSON.stringify(schema),
         }),
       });
 
